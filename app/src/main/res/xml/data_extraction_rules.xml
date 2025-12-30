@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="sensitive_prefs.xml" />
+        <exclude domain="database" path="burner_phone_database" />
+    </cloud-backup>
+</data-extraction-rules>

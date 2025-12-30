@@ -1,0 +1,10 @@
+
+<resources>
+    <string name="app_name">BurnerPhone</string>
+    <string name="notification_channel_service_name">Device Monitoring</string>
+    <string name="notification_channel_service_description">Background monitoring service</string>
+    <string name="notification_channel_alerts_name">Anomaly Alerts</string>
+    <string name="notification_channel_alerts_description">Alerts for detected surveillance patterns</string>
+    <string name="notification_title">BurnerPhone Active</string>
+    <string name="notification_text">Monitoring device patterns</string>
+</resources>
