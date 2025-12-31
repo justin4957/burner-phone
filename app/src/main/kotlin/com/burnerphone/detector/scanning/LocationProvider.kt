@@ -24,10 +24,16 @@ class LocationProvider(context: Context) {
         LocationServices.getFusedLocationProviderClient(context)
 
     @SuppressLint("MissingPermission")
-    suspend fun getCurrentLocation(): LocationData? {
+    suspend fun getCurrentLocation(useCoarseLocation: Boolean = false): LocationData? {
         return try {
+            val priority = if (useCoarseLocation) {
+                Priority.PRIORITY_LOW_POWER  // Coarse location for battery saving
+            } else {
+                Priority.PRIORITY_HIGH_ACCURACY  // Accurate location for tracking
+            }
+
             val location = fusedLocationClient.getCurrentLocation(
-                Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+                priority,
                 null
             ).await()
 
