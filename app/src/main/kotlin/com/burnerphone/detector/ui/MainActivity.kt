@@ -8,6 +8,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,6 +18,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.burnerphone.detector.BurnerPhoneApplication
 import com.burnerphone.detector.data.models.AnomalyDetection
 import com.burnerphone.detector.service.DeviceMonitoringService
@@ -54,11 +59,13 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             BurnerPhoneTheme {
+                val navController = rememberNavController()
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    MainScreen(
+                    BurnerPhoneNavHost(
+                        navController = navController,
                         onStartMonitoring = { checkPermissionsAndStart() },
                         onStopMonitoring = { stopMonitoringService() }
                     )
@@ -99,9 +106,39 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun MainScreen(
+fun BurnerPhoneNavHost(
+    navController: NavHostController,
     onStartMonitoring: () -> Unit,
     onStopMonitoring: () -> Unit
+) {
+    NavHost(
+        navController = navController,
+        startDestination = "main"
+    ) {
+        composable("main") {
+            MainScreen(
+                onStartMonitoring = onStartMonitoring,
+                onStopMonitoring = onStopMonitoring,
+                onDeviceClick = { deviceAddress ->
+                    navController.navigate("device/$deviceAddress")
+                }
+            )
+        }
+        composable("device/{deviceAddress}") { backStackEntry ->
+            val deviceAddress = backStackEntry.arguments?.getString("deviceAddress") ?: return@composable
+            DeviceDetailScreen(
+                deviceAddress = deviceAddress,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+    }
+}
+
+@Composable
+fun MainScreen(
+    onStartMonitoring: () -> Unit,
+    onStopMonitoring: () -> Unit,
+    onDeviceClick: (String) -> Unit = {}
 ) {
     var isMonitoring by remember { mutableStateOf(false) }
     val app = androidx.compose.ui.platform.LocalContext.current.applicationContext as BurnerPhoneApplication
@@ -181,7 +218,10 @@ fun MainScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(anomalies) { anomaly ->
-                    AnomalyCard(anomaly)
+                    AnomalyCard(
+                        anomaly = anomaly,
+                        onDeviceClick = onDeviceClick
+                    )
                 }
             }
         }
@@ -189,7 +229,10 @@ fun MainScreen(
 }
 
 @Composable
-fun AnomalyCard(anomaly: AnomalyDetection) {
+fun AnomalyCard(
+    anomaly: AnomalyDetection,
+    onDeviceClick: (String) -> Unit = {}
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -227,10 +270,26 @@ fun AnomalyCard(anomaly: AnomalyDetection) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            Text(
-                text = "Devices: ${anomaly.deviceAddresses.joinToString(", ")}",
-                style = MaterialTheme.typography.bodySmall
-            )
+            // Clickable device addresses
+            Column {
+                Text(
+                    text = "Devices (tap to view):",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                anomaly.deviceAddresses.forEach { deviceAddress ->
+                    Text(
+                        text = "  • $deviceAddress",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .clickable { onDeviceClick(deviceAddress) }
+                            .padding(vertical = 2.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
 
             Text(
                 text = "Detected: ${formatTimestamp(anomaly.detectedAt)}",
