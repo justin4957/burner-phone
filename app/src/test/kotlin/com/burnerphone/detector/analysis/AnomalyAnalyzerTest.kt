@@ -525,6 +525,213 @@ class AnomalyAnalyzerTest {
     }
 
     // ============================================================
+    // Correlation Pattern Tests
+    // ============================================================
+
+    @Test
+    fun testCorrelationPattern_twoDevicesAppearTogether() = runTest {
+        val device1 = "AA:BB:CC:DD:EE:01"
+        val device2 = "AA:BB:CC:DD:EE:02"
+        val baseTime = System.currentTimeMillis()
+
+        // Create detections where both devices appear together multiple times
+        val allDetections = mutableListOf<DeviceDetection>()
+        for (i in 0..4) {
+            val timestamp = baseTime + i * 10 * 60 * 1000  // Every 10 minutes
+            // Both devices appear within 2 minutes of each other
+            allDetections.add(
+                createDetection(device1, timestamp, deviceType = DeviceType.BLUETOOTH_DEVICE)
+            )
+            allDetections.add(
+                createDetection(device2, timestamp + 60 * 1000, deviceType = DeviceType.BLUETOOTH_DEVICE)
+            )
+        }
+
+        mockDeviceDao.uniqueDevices = listOf(device1, device2)
+        mockDeviceDao.allDetectionsByType[DeviceType.BLUETOOTH_DEVICE] = allDetections
+
+        analyzer.analyzeAll()
+
+        // Should detect correlation pattern
+        val correlationAnomalies = mockAnomalyDao.insertedAnomalies.filter {
+            it.anomalyType == AnomalyType.CORRELATION_PATTERN
+        }
+        assertTrue(correlationAnomalies.isNotEmpty())
+
+        val anomaly = correlationAnomalies.first()
+        assertEquals(2, anomaly.deviceAddresses.size)
+        assertTrue(anomaly.deviceAddresses.contains(device1))
+        assertTrue(anomaly.deviceAddresses.contains(device2))
+        assertTrue(anomaly.anomalyScore > 0.0)
+    }
+
+    @Test
+    fun testCorrelationPattern_noCorrelation() = runTest {
+        val device1 = "AA:BB:CC:DD:EE:01"
+        val device2 = "AA:BB:CC:DD:EE:02"
+        val baseTime = System.currentTimeMillis()
+
+        // Create detections where devices appear independently (different time windows)
+        val allDetections = mutableListOf<DeviceDetection>()
+        for (i in 0..4) {
+            // Device 1 appears
+            allDetections.add(
+                createDetection(device1, baseTime + i * 30 * 60 * 1000, deviceType = DeviceType.BLUETOOTH_DEVICE)
+            )
+            // Device 2 appears 20 minutes later (outside 5-minute window)
+            allDetections.add(
+                createDetection(device2, baseTime + i * 30 * 60 * 1000 + 20 * 60 * 1000, deviceType = DeviceType.BLUETOOTH_DEVICE)
+            )
+        }
+
+        mockDeviceDao.uniqueDevices = listOf(device1, device2)
+        mockDeviceDao.allDetectionsByType[DeviceType.BLUETOOTH_DEVICE] = allDetections
+
+        analyzer.analyzeAll()
+
+        // Should not detect correlation pattern
+        val correlationAnomalies = mockAnomalyDao.insertedAnomalies.filter {
+            it.anomalyType == AnomalyType.CORRELATION_PATTERN
+        }
+        assertEquals(0, correlationAnomalies.size)
+    }
+
+    @Test
+    fun testCorrelationPattern_whitelistedDeviceExcluded() = runTest {
+        val device1 = "AA:BB:CC:DD:EE:01"
+        val device2 = "AA:BB:CC:DD:EE:02"
+        val baseTime = System.currentTimeMillis()
+
+        // Whitelist device1
+        mockWhitelistDao.whitelistedAddresses.add(device1)
+
+        // Create detections where both devices appear together
+        val allDetections = mutableListOf<DeviceDetection>()
+        for (i in 0..4) {
+            val timestamp = baseTime + i * 10 * 60 * 1000
+            allDetections.add(
+                createDetection(device1, timestamp, deviceType = DeviceType.BLUETOOTH_DEVICE)
+            )
+            allDetections.add(
+                createDetection(device2, timestamp + 60 * 1000, deviceType = DeviceType.BLUETOOTH_DEVICE)
+            )
+        }
+
+        mockDeviceDao.uniqueDevices = listOf(device1, device2)
+        mockDeviceDao.allDetectionsByType[DeviceType.BLUETOOTH_DEVICE] = allDetections
+
+        analyzer.analyzeAll()
+
+        // Should not detect correlation (one device whitelisted)
+        val correlationAnomalies = mockAnomalyDao.insertedAnomalies.filter {
+            it.anomalyType == AnomalyType.CORRELATION_PATTERN
+        }
+        assertEquals(0, correlationAnomalies.size)
+    }
+
+    // ============================================================
+    // Device Cluster Tests
+    // ============================================================
+
+    @Test
+    fun testDeviceCluster_multipleNewDevices() = runTest {
+        val newDevices = listOf(
+            "AA:BB:CC:DD:EE:01",
+            "AA:BB:CC:DD:EE:02",
+            "AA:BB:CC:DD:EE:03",
+            "AA:BB:CC:DD:EE:04"
+        )
+        val baseTime = System.currentTimeMillis()
+
+        // All devices appear for the first time within a short window
+        val allDetections = mutableListOf<DeviceDetection>()
+        val clusterTime = baseTime
+        for ((index, device) in newDevices.withIndex()) {
+            allDetections.add(
+                createDetection(device, clusterTime + index * 60 * 1000, deviceType = DeviceType.WIFI_NETWORK)
+            )
+        }
+
+        mockDeviceDao.uniqueDevices = newDevices
+        mockDeviceDao.allDetectionsByType[DeviceType.WIFI_NETWORK] = allDetections
+
+        analyzer.analyzeAll()
+
+        // Should detect device cluster
+        val clusterAnomalies = mockAnomalyDao.insertedAnomalies.filter {
+            it.anomalyType == AnomalyType.NEW_DEVICE_CLUSTER
+        }
+        assertTrue(clusterAnomalies.isNotEmpty())
+
+        val anomaly = clusterAnomalies.first()
+        assertTrue(anomaly.deviceAddresses.size >= 3)
+        assertTrue(anomaly.anomalyScore > 0.0)
+    }
+
+    @Test
+    fun testDeviceCluster_onlyTwoDevices() = runTest {
+        val newDevices = listOf(
+            "AA:BB:CC:DD:EE:01",
+            "AA:BB:CC:DD:EE:02"
+        )
+        val baseTime = System.currentTimeMillis()
+
+        // Only two devices appear (below threshold of 3)
+        val allDetections = mutableListOf<DeviceDetection>()
+        for ((index, device) in newDevices.withIndex()) {
+            allDetections.add(
+                createDetection(device, baseTime + index * 60 * 1000, deviceType = DeviceType.WIFI_NETWORK)
+            )
+        }
+
+        mockDeviceDao.uniqueDevices = newDevices
+        mockDeviceDao.allDetectionsByType[DeviceType.WIFI_NETWORK] = allDetections
+
+        analyzer.analyzeAll()
+
+        // Should not detect cluster (below threshold)
+        val clusterAnomalies = mockAnomalyDao.insertedAnomalies.filter {
+            it.anomalyType == AnomalyType.NEW_DEVICE_CLUSTER
+        }
+        assertEquals(0, clusterAnomalies.size)
+    }
+
+    @Test
+    fun testDeviceCluster_devicesNotNew() = runTest {
+        val devices = listOf(
+            "AA:BB:CC:DD:EE:01",
+            "AA:BB:CC:DD:EE:02",
+            "AA:BB:CC:DD:EE:03"
+        )
+        val baseTime = System.currentTimeMillis()
+
+        // Devices appear long before the cluster window (2 hours ago)
+        val allDetections = mutableListOf<DeviceDetection>()
+        val oldTime = baseTime - 2 * 60 * 60 * 1000
+        for (device in devices) {
+            // First appearance (old)
+            allDetections.add(
+                createDetection(device, oldTime, deviceType = DeviceType.WIFI_NETWORK)
+            )
+            // Recent appearance
+            allDetections.add(
+                createDetection(device, baseTime, deviceType = DeviceType.WIFI_NETWORK)
+            )
+        }
+
+        mockDeviceDao.uniqueDevices = devices
+        mockDeviceDao.allDetectionsByType[DeviceType.WIFI_NETWORK] = allDetections
+
+        analyzer.analyzeAll()
+
+        // Should not detect cluster (devices are not new)
+        val clusterAnomalies = mockAnomalyDao.insertedAnomalies.filter {
+            it.anomalyType == AnomalyType.NEW_DEVICE_CLUSTER
+        }
+        assertEquals(0, clusterAnomalies.size)
+    }
+
+    // ============================================================
     // Helper Functions
     // ============================================================
 
@@ -532,11 +739,12 @@ class AnomalyAnalyzerTest {
         address: String,
         timestamp: Long,
         latitude: Double? = null,
-        longitude: Double? = null
+        longitude: Double? = null,
+        deviceType: DeviceType = DeviceType.WIFI_NETWORK
     ): DeviceDetection {
         return DeviceDetection(
             deviceAddress = address,
-            deviceType = DeviceType.WIFI_NETWORK,
+            deviceType = deviceType,
             deviceName = "Test Device",
             timestamp = timestamp,
             latitude = latitude,
@@ -577,6 +785,7 @@ class AnomalyAnalyzerTest {
     class FakeDeviceDetectionDao : DeviceDetectionDao {
         var uniqueDevices = listOf<String>()
         val detectionsForAddress = mutableMapOf<String, List<DeviceDetection>>()
+        val allDetectionsByType = mutableMapOf<DeviceType, List<DeviceDetection>>()
 
         override suspend fun insert(detection: DeviceDetection): Long = 0
         override suspend fun insertAll(detections: List<DeviceDetection>) {}
@@ -592,6 +801,14 @@ class AnomalyAnalyzerTest {
             endTime: Long
         ): List<DeviceDetection> {
             return detectionsForAddress[address] ?: emptyList()
+        }
+
+        override suspend fun getAllDetectionsInTimeRange(
+            type: DeviceType,
+            startTime: Long,
+            endTime: Long
+        ): List<DeviceDetection> {
+            return allDetectionsByType[type] ?: emptyList()
         }
 
         override suspend fun getUniqueDeviceAddresses(type: DeviceType): List<String> {

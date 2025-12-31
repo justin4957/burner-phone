@@ -43,6 +43,19 @@ interface DeviceDetectionDao {
     ): List<DeviceDetection>
 
     @Query("""
+        SELECT * FROM device_detections
+        WHERE deviceType = :type
+        AND timestamp >= :startTime
+        AND timestamp <= :endTime
+        ORDER BY timestamp ASC
+    """)
+    suspend fun getAllDetectionsInTimeRange(
+        type: DeviceType,
+        startTime: Long,
+        endTime: Long
+    ): List<DeviceDetection>
+
+    @Query("""
         SELECT DISTINCT deviceAddress FROM device_detections
         WHERE deviceType = :type
     """)

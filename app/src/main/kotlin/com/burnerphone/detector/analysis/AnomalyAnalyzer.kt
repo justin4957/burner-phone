@@ -34,6 +34,10 @@ class AnomalyAnalyzer(
                 for (deviceAddress in devices) {
                     analyzeDevice(deviceAddress, deviceType)
                 }
+
+                // Analyze cross-device patterns
+                analyzeCorrelationPatterns(deviceType)
+                analyzeDeviceClusters(deviceType)
             }
         }
     }
@@ -265,6 +269,220 @@ class AnomalyAnalyzer(
     }
 
     /**
+     * Detect devices that consistently appear together (correlation patterns)
+     */
+    private suspend fun analyzeCorrelationPatterns(deviceType: DeviceType) {
+        val endTime = System.currentTimeMillis()
+        val startTime = endTime - ANALYSIS_WINDOW_MS
+
+        val allDevices = deviceDetectionDao.getUniqueDeviceAddresses(deviceType)
+        val nonWhitelistedDevices = allDevices.filter {
+            !whitelistedDeviceDao.isWhitelisted(it)
+        }
+
+        if (nonWhitelistedDevices.size < 2) return
+
+        // Get all detections for the time period
+        val allDetections = deviceDetectionDao.getAllDetectionsInTimeRange(
+            deviceType,
+            startTime,
+            endTime
+        )
+
+        // Group detections by time windows
+        val timeWindows = groupDetectionsByTimeWindow(allDetections, CORRELATION_TIME_WINDOW_MS)
+
+        // Calculate co-occurrence for each device pair
+        val devicePairs = mutableMapOf<Pair<String, String>, CoOccurrenceData>()
+
+        for (window in timeWindows) {
+            val devicesInWindow = window.map { it.deviceAddress }.distinct()
+
+            // Create pairs from devices in this window
+            for (i in devicesInWindow.indices) {
+                for (j in i + 1 until devicesInWindow.size) {
+                    val device1 = devicesInWindow[i]
+                    val device2 = devicesInWindow[j]
+
+                    // Skip whitelisted devices
+                    if (whitelistedDeviceDao.isWhitelisted(device1) ||
+                        whitelistedDeviceDao.isWhitelisted(device2)) {
+                        continue
+                    }
+
+                    val pair = if (device1 < device2) {
+                        Pair(device1, device2)
+                    } else {
+                        Pair(device2, device1)
+                    }
+
+                    val data = devicePairs.getOrPut(pair) {
+                        CoOccurrenceData(
+                            device1 = pair.first,
+                            device2 = pair.second,
+                            coOccurrences = 0,
+                            timestamps = mutableListOf(),
+                            locations = mutableListOf()
+                        )
+                    }
+
+                    data.coOccurrences++
+                    data.timestamps.add(window.first().timestamp)
+
+                    // Add location if available
+                    window.firstOrNull { it.latitude != null && it.longitude != null }?.let {
+                        data.locations.add(LocationPoint(it.latitude!!, it.longitude!!, it.timestamp, it.accuracy))
+                    }
+                }
+            }
+        }
+
+        // Calculate correlation coefficient and create anomalies
+        for ((pair, data) in devicePairs) {
+            if (data.coOccurrences < MIN_COOCCURRENCES) continue
+
+            // Calculate how often these devices appear together vs independently
+            val device1Detections = allDetections.count { it.deviceAddress == pair.first }
+            val device2Detections = allDetections.count { it.deviceAddress == pair.second }
+            val totalWindows = timeWindows.size.toDouble()
+
+            // Correlation score: how often they appear together relative to independent appearances
+            val correlationCoefficient = data.coOccurrences.toDouble() /
+                min(device1Detections.toDouble(), device2Detections.toDouble())
+
+            val anomalyScore = min(correlationCoefficient * data.coOccurrences / 5.0, 1.0)
+
+            if (anomalyScore > ANOMALY_THRESHOLD && correlationCoefficient > MIN_CORRELATION_COEFFICIENT) {
+                val anomaly = AnomalyDetection(
+                    detectedAt = System.currentTimeMillis(),
+                    anomalyType = AnomalyType.CORRELATION_PATTERN,
+                    severity = calculateSeverity(anomalyScore),
+                    deviceAddresses = listOf(pair.first, pair.second),
+                    deviceType = deviceType,
+                    anomalyScore = anomalyScore,
+                    confidenceLevel = min(correlationCoefficient, 1.0),
+                    description = "Two devices consistently appear together (${data.coOccurrences} times, ${String.format("%.0f", correlationCoefficient * 100)}% correlation)",
+                    detectionCount = data.coOccurrences,
+                    locations = data.locations,
+                    timeSpan = if (data.timestamps.isNotEmpty()) {
+                        data.timestamps.maxOrNull()!! - data.timestamps.minOrNull()!!
+                    } else 0L,
+                    firstSeen = data.timestamps.minOrNull() ?: System.currentTimeMillis(),
+                    lastSeen = data.timestamps.maxOrNull() ?: System.currentTimeMillis()
+                )
+
+                anomalyDetectionDao.insert(anomaly)
+            }
+        }
+    }
+
+    /**
+     * Detect sudden appearance of multiple new devices (device clusters)
+     */
+    private suspend fun analyzeDeviceClusters(deviceType: DeviceType) {
+        val endTime = System.currentTimeMillis()
+        val startTime = endTime - CLUSTER_ANALYSIS_WINDOW_MS
+
+        val allDetections = deviceDetectionDao.getAllDetectionsInTimeRange(
+            deviceType,
+            startTime,
+            endTime
+        )
+
+        if (allDetections.isEmpty()) return
+
+        // Track when each device was first seen
+        val deviceFirstSeen = mutableMapOf<String, Long>()
+        for (detection in allDetections.sortedBy { it.timestamp }) {
+            if (!deviceFirstSeen.containsKey(detection.deviceAddress)) {
+                deviceFirstSeen[detection.deviceAddress] = detection.timestamp
+            }
+        }
+
+        // Group detections by time windows
+        val timeWindows = groupDetectionsByTimeWindow(allDetections, CLUSTER_TIME_WINDOW_MS)
+
+        for (window in timeWindows) {
+            val windowStart = window.minOfOrNull { it.timestamp } ?: continue
+            val windowEnd = window.maxOfOrNull { it.timestamp } ?: continue
+
+            // Find devices that are "new" within this window (first seen recently)
+            val newDevicesInWindow = window.filter { detection ->
+                val firstSeen = deviceFirstSeen[detection.deviceAddress] ?: return@filter false
+                val isNew = firstSeen >= windowStart - NEW_DEVICE_THRESHOLD_MS
+                val isNotWhitelisted = !whitelistedDeviceDao.isWhitelisted(detection.deviceAddress)
+                isNew && isNotWhitelisted
+            }.map { it.deviceAddress }.distinct()
+
+            // If multiple new devices appear at once, it's suspicious
+            if (newDevicesInWindow.size >= MIN_DEVICES_FOR_CLUSTER) {
+                val anomalyScore = min(newDevicesInWindow.size / 5.0, 1.0)
+
+                if (anomalyScore > ANOMALY_THRESHOLD) {
+                    val locationsInWindow = window.mapNotNull { detection ->
+                        detection.latitude?.let { lat ->
+                            detection.longitude?.let { lon ->
+                                LocationPoint(lat, lon, detection.timestamp, detection.accuracy)
+                            }
+                        }
+                    }
+
+                    val anomaly = AnomalyDetection(
+                        detectedAt = System.currentTimeMillis(),
+                        anomalyType = AnomalyType.NEW_DEVICE_CLUSTER,
+                        severity = calculateSeverity(anomalyScore),
+                        deviceAddresses = newDevicesInWindow,
+                        deviceType = deviceType,
+                        anomalyScore = anomalyScore,
+                        confidenceLevel = min(anomalyScore * 1.1, 1.0),
+                        description = "${newDevicesInWindow.size} new devices appeared simultaneously",
+                        detectionCount = newDevicesInWindow.size,
+                        locations = locationsInWindow,
+                        timeSpan = windowEnd - windowStart,
+                        firstSeen = windowStart,
+                        lastSeen = windowEnd
+                    )
+
+                    anomalyDetectionDao.insert(anomaly)
+                }
+            }
+        }
+    }
+
+    /**
+     * Group detections into time windows
+     */
+    private fun groupDetectionsByTimeWindow(
+        detections: List<DeviceDetection>,
+        windowSizeMs: Long
+    ): List<List<DeviceDetection>> {
+        if (detections.isEmpty()) return emptyList()
+
+        val sorted = detections.sortedBy { it.timestamp }
+        val windows = mutableListOf<MutableList<DeviceDetection>>()
+        var currentWindow = mutableListOf<DeviceDetection>()
+        var windowStart = sorted.first().timestamp
+
+        for (detection in sorted) {
+            if (detection.timestamp - windowStart > windowSizeMs) {
+                if (currentWindow.isNotEmpty()) {
+                    windows.add(currentWindow)
+                }
+                currentWindow = mutableListOf(detection)
+                windowStart = detection.timestamp
+            } else {
+                currentWindow.add(detection)
+            }
+        }
+
+        if (currentWindow.isNotEmpty()) {
+            windows.add(currentWindow)
+        }
+
+        return windows
+    }
+
+    /**
      * Calculate distance between two coordinates using Haversine formula
      */
     private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
@@ -282,6 +500,17 @@ class AnomalyAnalyzer(
         return earthRadius * c
     }
 
+    /**
+     * Data class for tracking co-occurrence statistics
+     */
+    private data class CoOccurrenceData(
+        val device1: String,
+        val device2: String,
+        var coOccurrences: Int,
+        val timestamps: MutableList<Long>,
+        val locations: MutableList<LocationPoint>
+    )
+
     companion object {
         private const val ANALYSIS_WINDOW_MS = 7 * 24 * 60 * 60 * 1000L  // 7 days
         private const val MIN_DETECTIONS_FOR_ANALYSIS = 3
@@ -289,5 +518,16 @@ class AnomalyAnalyzer(
         private const val ANOMALY_THRESHOLD = 0.5
         private const val SIGNIFICANT_DISTANCE_METERS = 500.0  // 500 meters
         private const val SUSPICIOUS_FREQUENCY_PER_HOUR = 10.0
+
+        // Correlation analysis constants
+        private const val CORRELATION_TIME_WINDOW_MS = 5 * 60 * 1000L  // 5 minutes
+        private const val MIN_COOCCURRENCES = 3
+        private const val MIN_CORRELATION_COEFFICIENT = 0.5
+
+        // Device cluster analysis constants
+        private const val CLUSTER_ANALYSIS_WINDOW_MS = 24 * 60 * 60 * 1000L  // 24 hours
+        private const val CLUSTER_TIME_WINDOW_MS = 10 * 60 * 1000L  // 10 minutes
+        private const val NEW_DEVICE_THRESHOLD_MS = 60 * 60 * 1000L  // 1 hour
+        private const val MIN_DEVICES_FOR_CLUSTER = 3
     }
 }
