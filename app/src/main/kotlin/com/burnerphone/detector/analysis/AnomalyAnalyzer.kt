@@ -2,6 +2,7 @@ package com.burnerphone.detector.analysis
 
 import com.burnerphone.detector.data.dao.AnomalyDetectionDao
 import com.burnerphone.detector.data.dao.DeviceDetectionDao
+import com.burnerphone.detector.data.dao.WhitelistedDeviceDao
 import com.burnerphone.detector.data.models.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -13,7 +14,8 @@ import kotlin.math.*
  */
 class AnomalyAnalyzer(
     private val deviceDetectionDao: DeviceDetectionDao,
-    private val anomalyDetectionDao: AnomalyDetectionDao
+    private val anomalyDetectionDao: AnomalyDetectionDao,
+    private val whitelistedDeviceDao: WhitelistedDeviceDao
 ) {
 
     /**
@@ -40,6 +42,11 @@ class AnomalyAnalyzer(
      * Analyze a specific device for anomalous patterns
      */
     private suspend fun analyzeDevice(deviceAddress: String, deviceType: DeviceType) {
+        // Skip whitelisted devices
+        if (whitelistedDeviceDao.isWhitelisted(deviceAddress)) {
+            return
+        }
+
         val endTime = System.currentTimeMillis()
         val startTime = endTime - ANALYSIS_WINDOW_MS
 
