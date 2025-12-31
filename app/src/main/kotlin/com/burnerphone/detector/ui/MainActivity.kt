@@ -27,6 +27,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.burnerphone.detector.BurnerPhoneApplication
 import com.burnerphone.detector.data.models.AnomalyDetection
+import com.burnerphone.detector.power.BatteryMonitor
 import com.burnerphone.detector.service.DeviceMonitoringService
 import com.burnerphone.detector.ui.theme.BurnerPhoneTheme
 import java.text.SimpleDateFormat
@@ -156,7 +157,8 @@ fun MainScreen(
     onNavigateToWhitelist: () -> Unit = {}
 ) {
     var isMonitoring by remember { mutableStateOf(false) }
-    val app = androidx.compose.ui.platform.LocalContext.current.applicationContext as BurnerPhoneApplication
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val app = context.applicationContext as BurnerPhoneApplication
     val anomalies by app.database.anomalyDetectionDao()
         .getUnacknowledgedAnomalies()
         .collectAsState(initial = emptyList())
@@ -164,6 +166,21 @@ fun MainScreen(
     val whitelistCount by app.database.whitelistedDeviceDao()
         .getWhitelistedCount()
         .collectAsState(initial = 0)
+
+    // Battery monitor for displaying stats
+    val batteryMonitor = remember { BatteryMonitor(context) }
+    val batteryLevel by batteryMonitor.batteryLevel.collectAsState()
+    val isCharging by batteryMonitor.isCharging.collectAsState()
+    val isPowerSaveMode by batteryMonitor.isPowerSaveMode.collectAsState()
+    val scanInterval by batteryMonitor.scanInterval.collectAsState()
+    val isBluetoothEnabled by batteryMonitor.isBluetoothEnabled.collectAsState()
+
+    DisposableEffect(Unit) {
+        batteryMonitor.startMonitoring()
+        onDispose {
+            batteryMonitor.stopMonitoring()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -212,6 +229,103 @@ fun MainScreen(
                     ) {
                         Text(if (isMonitoring) "Stop" else "Start")
                     }
+                }
+            }
+        }
+
+        // Battery status card
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = when {
+                    isCharging -> MaterialTheme.colorScheme.primaryContainer
+                    isPowerSaveMode -> MaterialTheme.colorScheme.tertiaryContainer
+                    batteryLevel < 20 -> MaterialTheme.colorScheme.errorContainer
+                    batteryLevel < 50 -> MaterialTheme.colorScheme.secondaryContainer
+                    else -> MaterialTheme.colorScheme.surface
+                }
+            )
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Text(
+                    text = "Battery & Power Status",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Battery Level:",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = "$batteryLevel%",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Status:",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = when {
+                            isCharging -> "Charging"
+                            isPowerSaveMode -> "Power Save Mode"
+                            else -> "Normal"
+                        },
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Scan Interval:",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = formatScanInterval(scanInterval),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Bluetooth Scanning:",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = if (isBluetoothEnabled) "Enabled" else "Disabled (Battery Saver)",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (isBluetoothEnabled) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
                 }
             }
         }
@@ -383,4 +497,13 @@ fun AnomalyCard(
 private fun formatTimestamp(timestamp: Long): String {
     val sdf = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault())
     return sdf.format(Date(timestamp))
+}
+
+private fun formatScanInterval(intervalMs: Long): String {
+    val seconds = intervalMs / 1000
+    return when {
+        seconds < 60 -> "${seconds}s"
+        seconds < 3600 -> "${seconds / 60}m"
+        else -> "${seconds / 3600}h"
+    }
 }
