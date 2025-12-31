@@ -12,6 +12,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -121,6 +124,9 @@ fun BurnerPhoneNavHost(
                 onStopMonitoring = onStopMonitoring,
                 onDeviceClick = { deviceAddress ->
                     navController.navigate("device/$deviceAddress")
+                },
+                onNavigateToWhitelist = {
+                    navController.navigate("whitelist")
                 }
             )
         }
@@ -131,6 +137,14 @@ fun BurnerPhoneNavHost(
                 onNavigateBack = { navController.popBackStack() }
             )
         }
+        composable("whitelist") {
+            WhitelistScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onDeviceClick = { deviceAddress ->
+                    navController.navigate("device/$deviceAddress")
+                }
+            )
+        }
     }
 }
 
@@ -138,13 +152,18 @@ fun BurnerPhoneNavHost(
 fun MainScreen(
     onStartMonitoring: () -> Unit,
     onStopMonitoring: () -> Unit,
-    onDeviceClick: (String) -> Unit = {}
+    onDeviceClick: (String) -> Unit = {},
+    onNavigateToWhitelist: () -> Unit = {}
 ) {
     var isMonitoring by remember { mutableStateOf(false) }
     val app = androidx.compose.ui.platform.LocalContext.current.applicationContext as BurnerPhoneApplication
     val anomalies by app.database.anomalyDetectionDao()
         .getUnacknowledgedAnomalies()
         .collectAsState(initial = emptyList())
+
+    val whitelistCount by app.database.whitelistedDeviceDao()
+        .getWhitelistedCount()
+        .collectAsState(initial = 0)
 
     Column(
         modifier = Modifier
@@ -194,6 +213,63 @@ fun MainScreen(
                         Text(if (isMonitoring) "Stop" else "Start")
                     }
                 }
+            }
+        }
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)
+                .clickable(onClick = onNavigateToWhitelist),
+            colors = CardDefaults.cardColors(
+                containerColor = if (whitelistCount > 0) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surface
+                }
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = null,
+                            tint = if (whitelistCount > 0) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                            modifier = Modifier
+                                .size(20.dp)
+                                .padding(end = 4.dp)
+                        )
+                        Text(
+                            text = "Whitelisted Devices",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = if (whitelistCount > 0) {
+                            "$whitelistCount device${if (whitelistCount != 1) "s" else ""} excluded from detection"
+                        } else {
+                            "No devices whitelisted"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Icon(
+                    Icons.Default.KeyboardArrowRight,
+                    contentDescription = "View whitelist"
+                )
             }
         }
 
