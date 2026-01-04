@@ -78,8 +78,8 @@ class MLAnomalyDetector {
         } else 0.0
 
         // Time of day pattern (entropy-based)
-        val hoursOfDay = detections.map { timestamp ->
-            ((timestamp / 3600000) % 24).toInt()
+        val hoursOfDay = detections.map { detection ->
+            ((detection.timestamp / 3600000L) % 24).toInt()
         }
         val hourEntropy = calculateEntropy(hoursOfDay)
 

@@ -344,7 +344,7 @@ class AnomalyAnalyzer(
         val clusterTimeSpan = cluster.last().timestamp - cluster.first().timestamp
         val expectedTimeSpan = meanInterval * cluster.size
 
-        return min(expectedTimeSpan / max(clusterTimeSpan, 1.0) / 10.0, 1.0)
+        return min(expectedTimeSpan / max(clusterTimeSpan.toDouble(), 1.0) / 10.0, 1.0)
     }
 
     private fun calculateSeverity(anomalyScore: Double): AnomalySeverity {
