@@ -4,7 +4,13 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
+import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import com.burnerphone.detector.data.AppDatabase
+import com.burnerphone.detector.workers.DataCleanupWorker
+import java.util.concurrent.TimeUnit
 
 class BurnerPhoneApplication : Application() {
 
@@ -15,6 +21,7 @@ class BurnerPhoneApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannels()
+        scheduleDataCleanup()
     }
 
     private fun createNotificationChannels() {
@@ -39,6 +46,30 @@ class BurnerPhoneApplication : Application() {
             notificationManager.createNotificationChannel(serviceChannel)
             notificationManager.createNotificationChannel(alertChannel)
         }
+    }
+
+    /**
+     * Schedule periodic data cleanup to run daily
+     * Runs during low-usage periods with no strict constraints
+     */
+    private fun scheduleDataCleanup() {
+        val constraints = Constraints.Builder()
+            .setRequiresBatteryNotLow(true)
+            .build()
+
+        val cleanupWorkRequest = PeriodicWorkRequestBuilder<DataCleanupWorker>(
+            repeatInterval = 1,
+            repeatIntervalTimeUnit = TimeUnit.DAYS
+        )
+            .setConstraints(constraints)
+            .setInitialDelay(4, TimeUnit.HOURS) // Initial delay to avoid running immediately
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            DataCleanupWorker.WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP, // Keep existing schedule if already scheduled
+            cleanupWorkRequest
+        )
     }
 
     companion object {
