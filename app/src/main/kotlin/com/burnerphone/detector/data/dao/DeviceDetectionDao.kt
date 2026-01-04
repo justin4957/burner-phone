@@ -82,4 +82,10 @@ interface DeviceDetectionDao {
         ORDER BY timestamp DESC
     """)
     suspend fun getDetectionsWithLocation(startTime: Long): List<DeviceDetection>
+
+    @Query("SELECT COUNT(*) FROM device_detections")
+    suspend fun getTotalCount(): Int
+
+    @Query("SELECT COUNT(*) FROM device_detections WHERE deviceType = :type")
+    suspend fun getCountByType(type: DeviceType): Int
 }

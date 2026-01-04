@@ -52,4 +52,34 @@ interface AnomalyDetectionDao {
 
     @Query("DELETE FROM anomaly_detections WHERE detectedAt < :cutoffTime")
     suspend fun deleteOldAnomalies(cutoffTime: Long): Int
+
+    @Query("""
+        DELETE FROM anomaly_detections
+        WHERE detectedAt < :cutoffTime
+        AND (isAcknowledged = 1 OR isFalsePositive = 1)
+    """)
+    suspend fun deleteOldResolvedAnomalies(cutoffTime: Long): Int
+
+    @Query("""
+        DELETE FROM anomaly_detections
+        WHERE detectedAt < :cutoffTime
+        AND isAcknowledged = 0
+        AND isFalsePositive = 0
+    """)
+    suspend fun deleteOldUnresolvedAnomalies(cutoffTime: Long): Int
+
+    @Query("SELECT COUNT(*) FROM anomaly_detections")
+    suspend fun getTotalCount(): Int
+
+    @Query("""
+        SELECT COUNT(*) FROM anomaly_detections
+        WHERE isAcknowledged = 1 OR isFalsePositive = 1
+    """)
+    suspend fun getResolvedCount(): Int
+
+    @Query("""
+        SELECT COUNT(*) FROM anomaly_detections
+        WHERE isAcknowledged = 0 AND isFalsePositive = 0
+    """)
+    suspend fun getActiveCount(): Int
 }
