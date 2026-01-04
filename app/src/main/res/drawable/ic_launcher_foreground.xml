@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Shield with radar scanning waves - surveillance detection theme -->
+    <group
+        android:translateX="54"
+        android:translateY="54">
+
+        <!-- Outer scanning wave (pulsing effect) -->
+        <path
+            android:fillColor="#40FFFFFF"
+            android:pathData="M0,-36 A36,36 0 0,1 0,36 A36,36 0 0,1 0,-36 Z
+                         M0,-32 A32,32 0 0,1 0,32 A32,32 0 0,1 0,-32 Z"/>
+
+        <!-- Middle scanning wave -->
+        <path
+            android:fillColor="#60FFFFFF"
+            android:pathData="M0,-28 A28,28 0 0,1 0,28 A28,28 0 0,1 0,-28 Z
+                         M0,-24 A24,24 0 0,1 0,24 A24,24 0 0,1 0,-24 Z"/>
+
+        <!-- Shield outline -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M0,-30
+                         C8,-30 14,-28 18,-24
+                         L18,-2
+                         C18,8 12,16 0,22
+                         C-12,16 -18,8 -18,-2
+                         L-18,-24
+                         C-14,-28 -8,-30 0,-30 Z
+                         M0,-26
+                         C-7,-26 -12,-24.5 -14,-22
+                         L-14,-2
+                         C-14,6 -10,12 0,17
+                         C10,12 14,6 14,-2
+                         L14,-22
+                         C12,-24.5 7,-26 0,-26 Z"/>
+
+        <!-- Scanner beam (sweeping radar line) -->
+        <path
+            android:fillColor="#80FFFFFF"
+            android:pathData="M0,0 L10,-10 L11,-9 L1,1 Z"/>
+        <path
+            android:fillColor="#80FFFFFF"
+            android:pathData="M0,0 L-10,10 L-9,11 L1,1 Z"/>
+
+        <!-- Central detection sensor/eye -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M0,-8
+                         C-6,-8 -10,-4 -10,0
+                         C-10,4 -6,8 0,8
+                         C6,8 10,4 10,0
+                         C10,-4 6,-8 0,-8 Z"/>
+
+        <!-- Sensor center -->
+        <path
+            android:fillColor="#E53935"
+            android:pathData="M0,-4 A4,4 0 0,1 0,4 A4,4 0 0,1 0,-4 Z"/>
+
+        <!-- Scanning arc indicators -->
+        <path
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="1.5"
+            android:strokeLineCap="round"
+            android:pathData="M-16,-8 A18,18 0 0,1 -8,-16"/>
+        <path
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="1.5"
+            android:strokeLineCap="round"
+            android:pathData="M16,-8 A18,18 0 0,0 8,-16"/>
+        <path
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="1.5"
+            android:strokeLineCap="round"
+            android:pathData="M-16,8 A18,18 0 0,0 -8,16"/>
+        <path
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="1.5"
+            android:strokeLineCap="round"
+            android:pathData="M16,8 A18,18 0 0,1 8,16"/>
+    </group>
+</vector>
