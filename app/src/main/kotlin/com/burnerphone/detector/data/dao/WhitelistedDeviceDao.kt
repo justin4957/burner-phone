@@ -19,6 +19,9 @@ interface WhitelistedDeviceDao {
     @Query("SELECT * FROM whitelisted_devices ORDER BY whitelistedAt DESC")
     fun getAllWhitelisted(): Flow<List<WhitelistedDevice>>
 
+    @Query("SELECT * FROM whitelisted_devices ORDER BY whitelistedAt DESC")
+    suspend fun getAllWhitelistedList(): List<WhitelistedDevice>
+
     @Query("SELECT * FROM whitelisted_devices WHERE deviceAddress = :deviceAddress")
     suspend fun getByAddress(deviceAddress: String): WhitelistedDevice?
 

@@ -94,6 +94,11 @@ dependencies {
     // JSON serialization
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
 
+    // TensorFlow Lite for ML-based anomaly detection
+    implementation("org.tensorflow:tensorflow-lite:2.14.0")
+    implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
+    implementation("org.tensorflow:tensorflow-lite-metadata:0.4.4")
+
     // Testing
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")

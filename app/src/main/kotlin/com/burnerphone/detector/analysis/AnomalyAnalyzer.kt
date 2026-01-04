@@ -10,13 +10,14 @@ import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics
 import kotlin.math.*
 
 /**
- * Analyzes device detection patterns for statistical anomalies
+ * Analyzes device detection patterns for statistical and ML-based anomalies
  */
 class AnomalyAnalyzer(
     private val deviceDetectionDao: DeviceDetectionDao,
     private val anomalyDetectionDao: AnomalyDetectionDao,
     private val whitelistedDeviceDao: WhitelistedDeviceDao
 ) {
+    private val mlDetector = MLAnomalyDetector()
 
     /**
      * Run full anomaly analysis on all device data
@@ -37,6 +38,35 @@ class AnomalyAnalyzer(
             }
         }
     }
+
+    /**
+     * Train ML model on normal device behavior
+     */
+    suspend fun trainMLModel() {
+        withContext(Dispatchers.Default) {
+            val endTime = System.currentTimeMillis()
+            val startTime = endTime - (30L * 24 * 60 * 60 * 1000) // 30 days of history
+
+            // Get all detections from whitelisted devices as "normal" training data
+            val whitelistedDevices = whitelistedDeviceDao.getAllWhitelistedList()
+            val normalDetections = whitelistedDevices.flatMap { device ->
+                deviceDetectionDao.getDetectionsInTimeRange(
+                    device.deviceAddress,
+                    startTime,
+                    endTime
+                )
+            }
+
+            if (normalDetections.size >= MIN_DETECTIONS_FOR_ML_TRAINING) {
+                mlDetector.trainModel(normalDetections)
+            }
+        }
+    }
+
+    /**
+     * Check if ML model is ready for inference
+     */
+    fun isMLModelReady(): Boolean = mlDetector.isModelReady()
 
     /**
      * Analyze a specific device for anomalous patterns
@@ -68,6 +98,64 @@ class AnomalyAnalyzer(
 
         // Analyze frequency patterns
         analyzeFrequencyPatterns(deviceAddress, deviceType, detections)
+
+        // ML-based anomaly detection
+        if (mlDetector.isModelReady()) {
+            analyzeMLPatterns(deviceAddress, deviceType, detections)
+        }
+    }
+
+    /**
+     * ML-based anomaly detection
+     */
+    private suspend fun analyzeMLPatterns(
+        deviceAddress: String,
+        deviceType: DeviceType,
+        detections: List<DeviceDetection>
+    ) {
+        val anomalyScore = mlDetector.predictAnomalyScore(detections)
+
+        if (anomalyScore > ML_ANOMALY_THRESHOLD) {
+            val anomaly = AnomalyDetection(
+                detectedAt = System.currentTimeMillis(),
+                anomalyType = AnomalyType.ML_BASED_ANOMALY,
+                severity = calculateSeverity(anomalyScore),
+                deviceAddresses = listOf(deviceAddress),
+                deviceType = deviceType,
+                anomalyScore = anomalyScore,
+                confidenceLevel = min(anomalyScore * 1.1, 1.0),
+                description = "ML model detected unusual behavior pattern (score: ${String.format("%.2f", anomalyScore)})",
+                detectionCount = detections.size,
+                locations = detections.mapNotNull { detection ->
+                    detection.latitude?.let { lat ->
+                        detection.longitude?.let { lon ->
+                            LocationPoint(lat, lon, detection.timestamp, detection.accuracy)
+                        }
+                    }
+                },
+                timeSpan = detections.last().timestamp - detections.first().timestamp,
+                firstSeen = detections.first().timestamp,
+                lastSeen = detections.last().timestamp
+            )
+
+            anomalyDetectionDao.insert(anomaly)
+        }
+    }
+
+    /**
+     * Provide user feedback to improve ML model
+     */
+    suspend fun provideFeedback(deviceAddress: String, isAnomaly: Boolean) {
+        val endTime = System.currentTimeMillis()
+        val startTime = endTime - ANALYSIS_WINDOW_MS
+
+        val detections = deviceDetectionDao.getDetectionsInTimeRange(
+            deviceAddress,
+            startTime,
+            endTime
+        )
+
+        mlDetector.updateWithFeedback(detections, isAnomaly)
     }
 
     /**
@@ -286,7 +374,9 @@ class AnomalyAnalyzer(
         private const val ANALYSIS_WINDOW_MS = 7 * 24 * 60 * 60 * 1000L  // 7 days
         private const val MIN_DETECTIONS_FOR_ANALYSIS = 3
         private const val MIN_DETECTIONS_FOR_FREQUENCY_ANALYSIS = 5
+        private const val MIN_DETECTIONS_FOR_ML_TRAINING = 50  // Minimum samples for ML training
         private const val ANOMALY_THRESHOLD = 0.5
+        private const val ML_ANOMALY_THRESHOLD = 0.6  // Higher threshold for ML detection
         private const val SIGNIFICANT_DISTANCE_METERS = 500.0  // 500 meters
         private const val SUSPICIOUS_FREQUENCY_PER_HOUR = 10.0
     }
