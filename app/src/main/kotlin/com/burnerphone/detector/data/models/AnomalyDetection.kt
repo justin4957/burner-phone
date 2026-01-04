@@ -53,7 +53,8 @@ enum class AnomalyType {
     FREQUENCY_ANOMALY,        // Unusual appearance frequency
     CORRELATION_PATTERN,      // Multiple devices appearing together suspiciously
     SIGNAL_STRENGTH_ANOMALY,  // Unusual signal strength patterns
-    NEW_DEVICE_CLUSTER        // Sudden appearance of multiple new devices
+    NEW_DEVICE_CLUSTER,       // Sudden appearance of multiple new devices
+    ML_BASED_ANOMALY          // Machine learning detected behavioral deviation
 }
 
 enum class AnomalySeverity {
