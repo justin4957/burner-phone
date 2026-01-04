@@ -1,5 +1,10 @@
 # BurnerPhone Detector
 
+[![Android CI](https://github.com/justin4957/burner-phone/workflows/Android%20CI/badge.svg)](https://github.com/justin4957/burner-phone/actions/workflows/build.yml)
+[![Release](https://github.com/justin4957/burner-phone/workflows/Release%20Build/badge.svg)](https://github.com/justin4957/burner-phone/actions/workflows/release.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![API](https://img.shields.io/badge/API-26%2B-brightgreen.svg?style=flat)](https://android-arsenal.com/api?level=26)
+
 An Android application for detecting potential surveillance through statistical analysis of WiFi, Bluetooth, and network device patterns.
 
 ## Overview
@@ -100,6 +105,18 @@ cd burner-phone
 # Install on connected device
 ./gradlew installDebug
 ```
+
+### CI/CD Pipeline
+
+The project uses GitHub Actions for automated builds and testing:
+
+- **Continuous Integration**: Automatically builds and tests on every push and pull request
+- **Automated Testing**: Runs unit tests and lint checks
+- **Build Artifacts**: Uploads debug and release APKs for download
+- **Code Quality**: Runs detekt and ktlint for code quality checks
+- **Release Automation**: Creates GitHub releases when version tags are pushed
+
+View the [Actions tab](https://github.com/justin4957/burner-phone/actions) to see build status and download artifacts.
 
 ## Usage
 
