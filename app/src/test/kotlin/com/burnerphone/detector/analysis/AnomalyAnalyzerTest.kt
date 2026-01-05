@@ -819,6 +819,8 @@ class AnomalyAnalyzerTest {
         override suspend fun deleteOldDetections(cutoffTime: Long): Int = 0
         override suspend fun getDetectionsWithLocation(startTime: Long): List<DeviceDetection> = emptyList()
         override fun getRecentDetections(startTime: Long): Flow<List<DeviceDetection>> = flowOf(emptyList())
+        override suspend fun getTotalCount(): Int = 0
+        override suspend fun getCountByType(type: DeviceType): Int = 0
     }
 
     class FakeAnomalyDetectionDao : AnomalyDetectionDao {
@@ -837,6 +839,11 @@ class AnomalyAnalyzerTest {
         override fun getAnomaliesBySeverity(severity: AnomalySeverity): Flow<List<AnomalyDetection>> = flowOf(emptyList())
         override fun getUnacknowledgedCount(): Flow<Int> = flowOf(0)
         override suspend fun deleteOldAnomalies(cutoffTime: Long): Int = 0
+        override suspend fun deleteOldResolvedAnomalies(cutoffTime: Long): Int = 0
+        override suspend fun deleteOldUnresolvedAnomalies(cutoffTime: Long): Int = 0
+        override suspend fun getTotalCount(): Int = 0
+        override suspend fun getActiveCount(): Int = 0
+        override suspend fun getResolvedCount(): Int = 0
     }
 
     class FakeWhitelistedDeviceDao : WhitelistedDeviceDao {
@@ -863,5 +870,6 @@ class AnomalyAnalyzerTest {
 
         override fun isWhitelistedFlow(deviceAddress: String): Flow<Boolean> = flowOf(false)
         override fun getWhitelistedCount(): Flow<Int> = flowOf(whitelistedAddresses.size)
+        override suspend fun getAllWhitelistedList(): List<WhitelistedDevice> = emptyList()
     }
 }
