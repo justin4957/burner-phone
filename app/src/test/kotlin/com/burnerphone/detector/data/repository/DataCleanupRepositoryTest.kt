@@ -55,7 +55,7 @@ class DataCleanupRepositoryTest {
         // Verify correct methods were called
         verify(deviceDetectionDao).deleteOldDetections(anyLong())
         verify(anomalyDetectionDao).deleteOldUnresolvedAnomalies(anyLong())
-        verify(anomalyDetectionDao.deleteOldResolvedAnomalies(anyLong())
+        verify(anomalyDetectionDao).deleteOldResolvedAnomalies(anyLong())
 
         // Verify statistics
         assertEquals(10, stats.deviceDetectionsDeleted)
