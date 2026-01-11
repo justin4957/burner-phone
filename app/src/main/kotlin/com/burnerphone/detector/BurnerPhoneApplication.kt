@@ -9,6 +9,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.burnerphone.detector.data.AppDatabase
+import com.burnerphone.detector.workers.AnomalyAnalysisWorker
 import com.burnerphone.detector.workers.DataCleanupWorker
 import java.util.concurrent.TimeUnit
 
@@ -22,6 +23,7 @@ class BurnerPhoneApplication : Application() {
         super.onCreate()
         createNotificationChannels()
         scheduleDataCleanup()
+        scheduleAnomalyAnalysis()
     }
 
     private fun createNotificationChannels() {
@@ -69,6 +71,30 @@ class BurnerPhoneApplication : Application() {
             DataCleanupWorker.WORK_NAME,
             ExistingPeriodicWorkPolicy.KEEP, // Keep existing schedule if already scheduled
             cleanupWorkRequest
+        )
+    }
+
+    /**
+     * Schedule periodic anomaly analysis to run every 6 hours
+     * Analyzes device patterns to detect surveillance and tracking
+     */
+    private fun scheduleAnomalyAnalysis() {
+        val constraints = Constraints.Builder()
+            .setRequiresBatteryNotLow(true)
+            .build()
+
+        val analysisWorkRequest = PeriodicWorkRequestBuilder<AnomalyAnalysisWorker>(
+            repeatInterval = 6,
+            repeatIntervalTimeUnit = TimeUnit.HOURS
+        )
+            .setConstraints(constraints)
+            .setInitialDelay(30, TimeUnit.MINUTES) // Initial delay to avoid running immediately
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            AnomalyAnalysisWorker.WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP, // Keep existing schedule if already scheduled
+            analysisWorkRequest
         )
     }
 

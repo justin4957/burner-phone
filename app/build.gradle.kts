@@ -108,6 +108,7 @@ dependencies {
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
     testImplementation("org.mockito:mockito-core:5.7.0")
     testImplementation("org.mockito:mockito-inline:5.2.0")
+    testImplementation("androidx.work:work-testing:2.9.0")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
     androidTestImplementation(platform("androidx.compose:compose-bom:2024.01.00"))
