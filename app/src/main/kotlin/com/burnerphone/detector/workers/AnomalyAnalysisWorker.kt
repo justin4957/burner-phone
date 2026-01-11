@@ -6,6 +6,8 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.burnerphone.detector.BurnerPhoneApplication
 import com.burnerphone.detector.analysis.AnomalyAnalyzer
+import com.burnerphone.detector.notifications.AnomalyNotificationManager
+import kotlinx.coroutines.flow.first
 
 /**
  * WorkManager worker for periodic anomaly analysis
@@ -73,6 +75,11 @@ class AnomalyAnalysisWorker(
             Log.d(TAG, "  - Total anomalies: $anomalyCountAfter")
             Log.d(TAG, "  - Active (unacknowledged): $activeAnomalies")
 
+            // Send notifications for newly detected high-severity anomalies
+            if (newAnomalies > 0) {
+                sendAnomalyNotifications(database, anomalyCountBefore)
+            }
+
             Result.success()
         } catch (e: Exception) {
             Log.e(TAG, "Anomaly analysis failed", e)
@@ -84,6 +91,39 @@ class AnomalyAnalysisWorker(
                 Log.e(TAG, "Max retry attempts reached, marking as failed")
                 Result.failure()
             }
+        }
+    }
+
+    /**
+     * Send notifications for newly detected anomalies
+     */
+    private suspend fun sendAnomalyNotifications(
+        database: com.burnerphone.detector.data.AppDatabase,
+        previousAnomalyCount: Int
+    ) {
+        try {
+            // Get all anomalies and filter for new ones
+            // Since we don't have a direct "get anomalies after ID" query,
+            // we'll get unacknowledged anomalies which should include new ones
+            val unacknowledgedAnomalies = database.anomalyDetectionDao()
+                .getUnacknowledgedAnomalies()
+                .first()
+
+            // Filter for HIGH and CRITICAL severity
+            val highSeverityAnomalies = unacknowledgedAnomalies.filter {
+                it.severity == com.burnerphone.detector.data.models.AnomalySeverity.HIGH ||
+                it.severity == com.burnerphone.detector.data.models.AnomalySeverity.CRITICAL
+            }
+
+            if (highSeverityAnomalies.isNotEmpty()) {
+                val notificationManager = AnomalyNotificationManager(applicationContext)
+                notificationManager.notifyMultipleAnomalies(highSeverityAnomalies)
+
+                Log.d(TAG, "Sent notifications for ${highSeverityAnomalies.size} high-severity anomalies")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to send anomaly notifications", e)
+            // Don't fail the whole job if notifications fail
         }
     }
 
