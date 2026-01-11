@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package com.burnerphone.detector.ui
 
 import android.content.Intent
